@@ -1,0 +1,71 @@
+name: Turk Damasi APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'main.py'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Java kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gerekli araçları kur
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip build-essential python3-dev autoconf automake libtool libtool-bin pkg-config zlib1g-dev libffi-dev libssl-dev
+
+      - name: Python ortamını hazırla
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install "Cython==0.29.33" buildozer
+
+      - name: Buildozer ayarlarını oluştur
+        run: |
+          .venv/bin/buildozer init
+          python3 - <<'PY'
+          import re
+          p = "buildozer.spec"
+          s = open(p).read()
+          settings = {
+              "title": "Turk Damasi",
+              "package.name": "turkdamasi",
+              "package.domain": "org.example",
+              "source.include_exts": "py,png,jpg,kv,atlas",
+              "version": "1.0",
+              "requirements": "python3,kivy",
+              "orientation": "portrait",
+              "android.minapi": "23",
+              "android.archs": "arm64-v8a",
+          }
+          for key, value in settings.items():
+              pattern = r"(?m)^#?\s*" + re.escape(key) + r"\s*=.*$"
+              replacement = f"{key} = {value}"
+              if re.search(pattern, s):
+                  s = re.sub(pattern, lambda m: replacement, s, count=1)
+              else:
+                  s += f"\n{replacement}\n"
+          open(p, "w").write(s)
+          PY
+
+      - name: APK derle
+        run: .venv/bin/buildozer -v android debug
+
+      - name: APK dosyasını sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: Turk-Damasi-APK
+          path: bin/*.apk
+          if-no-files-found: error
